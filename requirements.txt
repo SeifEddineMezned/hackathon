@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+sqlalchemy
+watchdog
+requests
+pypdf
+faiss-cpu
+streamlit
+pandas
+numpy 
+types-requests
