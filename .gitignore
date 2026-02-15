@@ -1,0 +1,19 @@
+# Virtual environments
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Database
+*.db
+
+# FAISS
+*.index
+*.pkl
+
+# OS
+.DS_Store
+Thumbs.db

@@ -7,7 +7,7 @@ INBOX_DIR = BASE_DIR / "inbox"
 DB_PATH = BASE_DIR / "backend" / "ai_minds.db"
 VECTOR_STORE_PATH = BASE_DIR / "backend" / "vector_store"
 
-# Folder Monitoring
+# Folder Monitoring (Path objects)
 WATCH_DIRS = {
     "text": INBOX_DIR / "text",
     "docs": INBOX_DIR / "docs",
@@ -17,9 +17,9 @@ WATCH_DIRS = {
 
 # Model Configuration
 OLLAMA_BASE_URL = "http://localhost:11434"
-MODEL_MAIN = "qwen2.5:3b"
+MODEL_MAIN = "qwen2.5:3b-instruct"
 MODEL_EMBEDDING = "nomic-embed-text"
-MODEL_VISION = "qwen2.5-vl:3b"  # Adjusted to standard Ollama naming convention if needed
+MODEL_VISION = "qwen2.5vl:3b"
 MODEL_BACKUP = "phi:2.7b"
 
 # Whisper Configuration (Local)

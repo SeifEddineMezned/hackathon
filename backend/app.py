@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 import threading
 import logging
@@ -19,8 +19,12 @@ app = FastAPI(title="AI MINDS API", version="1.0")
 init_db()
 
 # Start Watcher in background
-watcher_thread = threading.Thread(target=start_watching, daemon=True)
-watcher_thread.start()
+try:
+    watcher_thread = threading.Thread(target=start_watching, daemon=True)
+    watcher_thread.start()
+    logger.info("Background watcher started successfully.")
+except Exception as e:
+    logger.error(f"Failed to start background watcher: {e}")
 
 # Start Maintenance Job
 job_runner.start()
@@ -47,8 +51,6 @@ def get_status():
 def query_endpoint(request: QueryRequest):
     try:
         result = engine.process_query(request.query)
-        # Assuming engine.process_query returns dict with correct keys
-        # If validator fails, default confidence is 50
         return QueryResponse(
             answer=result.get("answer", "I'm unsure."),
             confidence=int(result.get("confidence", 0)),
@@ -67,7 +69,7 @@ def get_timeline(limit: int = 50):
         events = session.query(MemoryEvent).order_by(MemoryEvent.created_at.desc()).limit(limit).all()
         return [{
             "id": e.id,
-            "created_at": e.created_at,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
             "source_type": e.source_type,
             "summary": e.summary_1line,
             "topics": e.topics
@@ -89,11 +91,12 @@ def get_actions(status: Optional[str] = None):
             "owner": i.owner,
             "priority": i.priority,
             "status": i.status,
-            "due_date": i.due_date
+            "due_date": i.due_date.isoformat() if i.due_date else None
         } for i in items]
     finally:
         session.close()
 
 if __name__ == "__main__":
     import uvicorn
+    # Make sure we bind locally
     uvicorn.run(app, host="127.0.0.1", port=8000)

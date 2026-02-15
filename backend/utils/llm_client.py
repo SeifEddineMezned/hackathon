@@ -1,93 +1,91 @@
-import requests
 import json
-import subprocess
+import requests
+import re
 import base64
-import logging
-from typing import Dict, List, Optional, Any
-from backend.config import OLLAMA_BASE_URL, MODEL_MAIN, MODEL_EMBEDDING, MODEL_VISION
+from typing import Any, Dict, List, Optional
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from backend.config import OLLAMA_BASE_URL, MODEL_EMBEDDING, MODEL_VISION
 
-def call_llm(model: str, prompt: str, system: Optional[str] = None, json_mode: bool = False) -> str:
-    """Calls Ollama LLM endpoint."""
+
+def _strip_code_fences(text: str) -> str:
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    return text.strip()
+
+
+def clean_json_response(text: str) -> Optional[Dict[str, Any]]:
+    if not text:
+        return None
+
+    text = _strip_code_fences(text)
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        candidate = text[start : end + 1]
+        try:
+            return json.loads(candidate)
+        except Exception:
+            pass
+
+    try:
+        return json.loads(text)
+    except Exception:
+        return None
+
+
+def call_llm(model: str, prompt: str, json_mode: bool = False, timeout_s: int = 60) -> str:
     url = f"{OLLAMA_BASE_URL}/api/generate"
+
+    if json_mode:
+        prompt = (
+            "Return ONLY valid JSON. No prose. No markdown.\n"
+            "If unsure, return {}.\n\n"
+            + prompt
+        )
+
     payload = {
         "model": model,
         "prompt": prompt,
         "stream": False,
-        "options": {"num_ctx": 4096}
+        "options": {"temperature": 0.2 if json_mode else 0.4},
     }
-    if system:
-        payload["system"] = system
-    if json_mode:
-        payload["format"] = "json"
 
-    try:
-        response = requests.post(url, json=payload, timeout=120)
-        response.raise_for_status()
-        return response.json().get("response", "").strip()
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error calling LLM {model}: {e}")
-        return ""
+    r = requests.post(url, json=payload, timeout=timeout_s)
+    r.raise_for_status()
+    return r.json().get("response", "")
 
-def call_embed(text: str, model: str = MODEL_EMBEDDING) -> List[float]:
-    """Generates embedding for text using Ollama."""
+
+def call_embed(text: str, model: str = MODEL_EMBEDDING, timeout_s: int = 20) -> Optional[List[float]]:
+    if not text:
+        return None
+
     url = f"{OLLAMA_BASE_URL}/api/embeddings"
-    payload = {
-        "model": model,
-        "prompt": text
-    }
-    try:
-        response = requests.post(url, json=payload, timeout=30)
-        response.raise_for_status()
-        embedding = response.json().get("embedding")
-        if not embedding:
-            logger.warning(f"No embedding returned for text: {text[:50]}...")
-            return []
-        return embedding
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error generating embedding: {e}")
-        return []
+    payload = {"model": model, "prompt": text}
 
-def call_vlm(image_path: str, prompt: str, model: str = MODEL_VISION) -> str:
-    """Calls Vision Language Model on an image file."""
+    r = requests.post(url, json=payload, timeout=timeout_s)
+    r.raise_for_status()
+    return r.json().get("embedding")
+
+
+def call_vlm(image_path: str, prompt: str, timeout_s: int = 60) -> str:
+    """
+    Calls Ollama Vision model (e.g., qwen2.5vl:3b).
+    """
     url = f"{OLLAMA_BASE_URL}/api/generate"
-    
-    try:
-        with open(image_path, "rb") as img_file:
-            img_b64 = base64.b64encode(img_file.read()).decode("utf-8")
-            
-        payload = {
-            "model": model,
-            "prompt": prompt,
-            "images": [img_b64],
-            "stream": False
-        }
-        
-        response = requests.post(url, json=payload, timeout=120)
-        response.raise_for_status()
-        return response.json().get("response", "").strip()
-    except Exception as e:
-        logger.error(f"Error calling VLM: {e}")
-        return ""
 
-def clean_json_response(response: str) -> Dict[str, Any]:
-    """Extracts JSON from markdown fences if present."""
-    try:
-        start = response.find("```json")
-        if start != -1:
-            end = response.find("```", start + 7)
-            if end != -1:
-                json_str = response[start + 7:end].strip()
-                return json.loads(json_str)
-        
-        start = response.find("{")
-        end = response.rfind("}")
-        if start != -1 and end != -1:
-             return json.loads(response[start:end+1])
-             
-        return json.loads(response)
-    except json.JSONDecodeError:
-        logger.error("Failed to parse JSON response")
-        return {}
+    with open(image_path, "rb") as f:
+        image_base64 = base64.b64encode(f.read()).decode("utf-8")
+
+    payload = {
+        "model": MODEL_VISION,
+        "prompt": prompt,
+        "images": [image_base64],
+        "stream": False,
+    }
+
+    r = requests.post(url, json=payload, timeout=timeout_s)
+    r.raise_for_status()
+    return r.json().get("response", "")

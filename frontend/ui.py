@@ -55,7 +55,8 @@ with tab1:
 with tab2:
     st.header("Recent Memories")
     if st.button("Refresh Timeline"):
-        st.experimental_rerun()
+        st.rerun()
+
         
     try:
         events = requests.get(f"{API_URL}/timeline").json()
